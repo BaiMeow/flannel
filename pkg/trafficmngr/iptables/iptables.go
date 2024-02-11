@@ -69,6 +69,25 @@ func (iptm IPTablesManager) MasqRules(cluster_cidrs []ip.IP4Net, lease *lease.Le
 		// Prevent performing Masquerade on external traffic which arrives from a Node that owns the container/pod IP address
 		rules = append(rules, trafficmngr.IPTablesRule{Table: "nat", Action: "-A", Chain: "FLANNEL-POSTRTG", Rulespec: []string{"!", "-s", cluster_cidr, "-d", pod_cidr, "-m", "comment", "--comment", "flanneld masq", "-j", "RETURN"}})
 	}
+	rtr, err := NewRouter()
+	if err != nil {
+		log.Errorf("Failed to create routing: %v", err)
+		return nil
+	}
+	for _, ccidr := range cluster_cidrs {
+		cluster_cidr := ccidr.String()
+		// NAT if has own prefsrc
+		for _, r := range rtr.(*router).v4 {
+			if r.PrefSrc == nil || r.Dst == nil || r.Gateway == nil {
+				continue
+			}
+			if supports_random_fully {
+				rules = append(rules, trafficmngr.IPTablesRule{Table: "nat", Action: "-A", Chain: "FLANNEL-POSTRTG", Rulespec: []string{"-s", cluster_cidr, "-d", r.Dst.String(), "-m", "comment", "--comment", "flanneld masq prefsrc-fix", "-j", "SNAT", "--to-source", r.PrefSrc.To4().String(), "--random-fully"}})
+			} else {
+				rules = append(rules, trafficmngr.IPTablesRule{Table: "nat", Action: "-A", Chain: "FLANNEL-POSTRTG", Rulespec: []string{"-s", cluster_cidr, "-d", r.Dst.String(), "-m", "comment", "--comment", "flanneld masq prefsrc-fix", "-j", "SNAT", "--to-source", r.PrefSrc.To4().String()}})
+			}
+		}
+	}
 	for _, ccidr := range cluster_cidrs {
 		cluster_cidr := ccidr.String()
 		// NAT if it's not multicast traffic
@@ -116,6 +135,25 @@ func (iptm IPTablesManager) MasqIP6Rules(cluster_cidrs []ip.IP6Net, lease *lease
 		cluster_cidr := ccidr.String()
 		// Prevent performing Masquerade on external traffic which arrives from a Node that owns the container/pod IP address
 		rules = append(rules, trafficmngr.IPTablesRule{Table: "nat", Action: "-A", Chain: "FLANNEL-POSTRTG", Rulespec: []string{"!", "-s", cluster_cidr, "-d", pod_cidr, "-m", "comment", "--comment", "flanneld masq", "-j", "RETURN"}})
+	}
+	rtr, err := NewRouter()
+	if err != nil {
+		log.Errorf("Failed to create routing: %v", err)
+		return nil
+	}
+	for _, ccidr := range cluster_cidrs {
+		cluster_cidr := ccidr.String()
+		// NAT if has own prefsrc
+		for _, r := range rtr.(*router).v6 {
+			if r.PrefSrc == nil || r.Dst == nil || r.Gateway == nil {
+				continue
+			}
+			if supports_random_fully {
+				rules = append(rules, trafficmngr.IPTablesRule{Table: "nat", Action: "-A", Chain: "FLANNEL-POSTRTG", Rulespec: []string{"-s", cluster_cidr, "-d", r.Dst.String(), "-m", "comment", "--comment", "flanneld masq prefsrc-fix", "-j", "SNAT", "--to-source", r.PrefSrc.String(), "--random-fully"}})
+			} else {
+				rules = append(rules, trafficmngr.IPTablesRule{Table: "nat", Action: "-A", Chain: "FLANNEL-POSTRTG", Rulespec: []string{"-s", cluster_cidr, "-d", r.Dst.String(), "-m", "comment", "--comment", "flanneld masq prefsrc-fix", "-j", "SNAT", "--to-source", r.PrefSrc.String()}})
+			}
+		}
 	}
 	for _, ccidr := range cluster_cidrs {
 		cluster_cidr := ccidr.String()
